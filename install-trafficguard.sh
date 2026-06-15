@@ -54,26 +54,38 @@ uninstall_process() {
     trap 'echo -e "\nОтмена."; return' INT
     read -p "Вы уверены? (y/N): " confirm < /dev/tty
     trap 'exit 0' INT
-    
+
     [[ "$confirm" != "y" ]] && return
 
-    systemctl stop antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
-    systemctl disable antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
-    
-    rm -f /usr/local/bin/traffic-guard /usr/local/bin/antiscan-aggregate-logs.sh
-    rm -f /etc/systemd/system/antiscan-* /etc/rsyslog.d/10-iptables-scanners.conf /etc/logrotate.d/iptables-scanners
+    # Удаляем файлы менеджера
     rm -f /usr/local/bin/rknpidor /opt/trafficguard-manager.sh "$MANUAL_FILE"
-    
-    iptables -D INPUT -j SCANNERS-BLOCK 2>/dev/null
-    iptables -F SCANNERS-BLOCK 2>/dev/null
-    iptables -X SCANNERS-BLOCK 2>/dev/null
-    
-    ipset flush SCANNERS-BLOCK-V4 2>/dev/null
-    ipset destroy SCANNERS-BLOCK-V4 2>/dev/null
-    ipset flush SCANNERS-BLOCK-V6 2>/dev/null
-    ipset destroy SCANNERS-BLOCK-V6 2>/dev/null
-    
-    systemctl restart rsyslog
+
+    # Используем встроенный uninstall traffic-guard (чистит UFW, ipset, iptables, systemd, rsyslog)
+    if command -v traffic-guard >/dev/null 2>&1; then
+        traffic-guard uninstall --yes
+    else
+        # Fallback: ручная чистка (если бинарник уже удалён)
+        systemctl stop antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
+        systemctl disable antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
+        rm -f /usr/local/bin/traffic-guard /usr/local/bin/antiscan-aggregate-logs.sh
+        rm -f /etc/systemd/system/antiscan-*
+        rm -f /etc/rsyslog.d/10-iptables-scanners.conf /etc/logrotate.d/iptables-scanners
+
+        iptables -D INPUT -j SCANNERS-BLOCK 2>/dev/null
+        iptables -F SCANNERS-BLOCK 2>/dev/null
+        iptables -X SCANNERS-BLOCK 2>/dev/null
+        ipset flush SCANNERS-BLOCK-V4 2>/dev/null
+        ipset destroy SCANNERS-BLOCK-V4 2>/dev/null
+        ipset flush SCANNERS-BLOCK-V6 2>/dev/null
+        ipset destroy SCANNERS-BLOCK-V6 2>/dev/null
+
+        # Чистим UFW (причина бага: правила оставались в before.rules)
+        sed -i '/SCANNERS-BLOCK/d' /etc/ufw/before.rules 2>/dev/null
+        sed -i '/SCANNERS-BLOCK/d' /etc/ufw/before6.rules 2>/dev/null
+        ufw reload 2>/dev/null
+    fi
+
+    systemctl restart rsyslog 2>/dev/null
     echo -e "${GREEN}✅ Удалено.${NC}"
     exit 0
 }
