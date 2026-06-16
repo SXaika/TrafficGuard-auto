@@ -3,6 +3,8 @@
 Скрипт устанавливает и настраивает защиту на основе проекта  
 [dotX12/traffic-guard](https://github.com/dotX12/traffic-guard).
 
+Используемые списки: [government_networks](https://github.com/shadow-netlab/traffic-guard-lists/blob/main/public/government_networks.list), [antiscanner](https://github.com/shadow-netlab/traffic-guard-lists/blob/main/public/antiscanner.list), [skipa](https://github.com/shadow-netlab/traffic-guard-lists/blob/main/public/skipa.list).
+
 После установки в любом месте достаточно выполнить:
 
 ```bash

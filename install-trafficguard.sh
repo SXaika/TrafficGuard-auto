@@ -22,6 +22,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CY
 TG_URL="https://raw.githubusercontent.com/dotX12/traffic-guard/master/install.sh"
 LIST_GOV="https://raw.githubusercontent.com/shadow-netlab/traffic-guard-lists/refs/heads/main/public/government_networks.list"
 LIST_SCAN="https://raw.githubusercontent.com/shadow-netlab/traffic-guard-lists/refs/heads/main/public/antiscanner.list"
+LIST_SKIPA="https://raw.githubusercontent.com/shadow-netlab/traffic-guard-lists/refs/heads/main/public/skipa.list"
 MANUAL_FILE="/opt/trafficguard-manual.list"
 
 check_root() {
@@ -54,26 +55,38 @@ uninstall_process() {
     trap 'echo -e "\nОтмена."; return' INT
     read -p "Вы уверены? (y/N): " confirm < /dev/tty
     trap 'exit 0' INT
-    
+
     [[ "$confirm" != "y" ]] && return
 
-    systemctl stop antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
-    systemctl disable antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
-    
-    rm -f /usr/local/bin/traffic-guard /usr/local/bin/antiscan-aggregate-logs.sh
-    rm -f /etc/systemd/system/antiscan-* /etc/rsyslog.d/10-iptables-scanners.conf /etc/logrotate.d/iptables-scanners
+    # Удаляем файлы менеджера
     rm -f /usr/local/bin/rknpidor /opt/trafficguard-manager.sh "$MANUAL_FILE"
-    
-    iptables -D INPUT -j SCANNERS-BLOCK 2>/dev/null
-    iptables -F SCANNERS-BLOCK 2>/dev/null
-    iptables -X SCANNERS-BLOCK 2>/dev/null
-    
-    ipset flush SCANNERS-BLOCK-V4 2>/dev/null
-    ipset destroy SCANNERS-BLOCK-V4 2>/dev/null
-    ipset flush SCANNERS-BLOCK-V6 2>/dev/null
-    ipset destroy SCANNERS-BLOCK-V6 2>/dev/null
-    
-    systemctl restart rsyslog
+
+    # Используем встроенный uninstall traffic-guard (чистит UFW, ipset, iptables, systemd, rsyslog)
+    if command -v traffic-guard >/dev/null 2>&1; then
+        traffic-guard uninstall --yes
+    else
+        # Fallback: ручная чистка (если бинарник уже удалён)
+        systemctl stop antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
+        systemctl disable antiscan-aggregate.timer antiscan-aggregate.service 2>/dev/null
+        rm -f /usr/local/bin/traffic-guard /usr/local/bin/antiscan-aggregate-logs.sh
+        rm -f /etc/systemd/system/antiscan-*
+        rm -f /etc/rsyslog.d/10-iptables-scanners.conf /etc/logrotate.d/iptables-scanners
+
+        iptables -D INPUT -j SCANNERS-BLOCK 2>/dev/null
+        iptables -F SCANNERS-BLOCK 2>/dev/null
+        iptables -X SCANNERS-BLOCK 2>/dev/null
+        ipset flush SCANNERS-BLOCK-V4 2>/dev/null
+        ipset destroy SCANNERS-BLOCK-V4 2>/dev/null
+        ipset flush SCANNERS-BLOCK-V6 2>/dev/null
+        ipset destroy SCANNERS-BLOCK-V6 2>/dev/null
+
+        # Чистим UFW (причина бага: правила оставались в before.rules)
+        sed -i '/SCANNERS-BLOCK/d' /etc/ufw/before.rules 2>/dev/null
+        sed -i '/SCANNERS-BLOCK/d' /etc/ufw/before6.rules 2>/dev/null
+        ufw reload 2>/dev/null
+    fi
+
+    systemctl restart rsyslog 2>/dev/null
     echo -e "${GREEN}✅ Удалено.${NC}"
     exit 0
 }
@@ -169,7 +182,7 @@ manage_test_ip() {
 
 update_lists() {
     echo -e "\n${CYAN}🔄 Обновление списков...${NC}"
-    traffic-guard full -u "$LIST_GOV" -u "$LIST_SCAN" --enable-logging
+    traffic-guard full -u "$LIST_GOV" -u "$LIST_SCAN" -u "$LIST_SKIPA" --enable-logging
     echo -e "${GREEN}✅ Готово!${NC}"
     sleep 2
 }
@@ -188,7 +201,7 @@ install_process() {
     if command -v curl >/dev/null; then curl -fsSL "$TG_URL" | bash; else wget -qO- "$TG_URL" | bash; fi
 
     echo -e "\n${BLUE}[INFO] Настройка правил...${NC}"
-    traffic-guard full -u "$LIST_GOV" -u "$LIST_SCAN" --enable-logging
+    traffic-guard full -u "$LIST_GOV" -u "$LIST_SCAN" -u "$LIST_SKIPA" --enable-logging
 
     if [ $? -ne 0 ]; then
         echo -e "\n${RED}❌ ОШИБКА УСТАНОВКИ!${NC}"
