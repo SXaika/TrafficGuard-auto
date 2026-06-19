@@ -5,7 +5,7 @@
 # - В меню разбана можно выбрать IP из списка цифрой.
 
 MANAGER_PATH="/opt/trafficguard-manager.sh"
-LINK_PATH="/usr/local/bin/rknpidor"
+LINK_PATH="/usr/local/bin/tguard"
 MANUAL_FILE="/opt/trafficguard-manual.list"
 
 # 1. ЧИСТКА
@@ -59,7 +59,7 @@ uninstall_process() {
     [[ "$confirm" != "y" ]] && return
 
     # Удаляем файлы менеджера
-    rm -f /usr/local/bin/rknpidor /opt/trafficguard-manager.sh "$MANUAL_FILE"
+    rm -f /usr/local/bin/tguard /opt/trafficguard-manager.sh "$MANUAL_FILE"
 
     # Используем встроенный uninstall traffic-guard (чистит UFW, ipset, iptables, systemd, rsyslog)
     if command -v traffic-guard >/dev/null 2>&1; then
